@@ -41,7 +41,7 @@ def main():
     parser.add_argument('--update',nargs='?', const=1, type=str, default="state")
     args = parser.parse_args()
 
-    learner_names = ["Agn", "Omn", "Cur", "Cur-T", "Cur-L"]
+    learner_names = ["Agn", "Omn", "Scot", "Cur", "Cur-T", "Cur-L", "BBox"]
 
     for run in range(args.avg_runs):
         if args.env_name == "driving":
@@ -67,6 +67,7 @@ def main():
             l_copy = copy.deepcopy(l)
             learners.append(l_copy)
 
+        batch_states = teacher.batch_teacher()
         print ("Begin teacher-learner interaction.")
         for iteration in range(args.max_iter):
             if iteration==0 or (iteration+1)%100 == 0:
@@ -79,25 +80,38 @@ def main():
             curriculum_curves[0, env.state_to_task(states[0]), iteration] = 1
 
             #Omn teacher
-            rho_imt, states = teacher.imt_teacher(learners[1], iteration)
+            rho_imt, states = teacher.imt_teacher(learners[1])
             rho_imt = teacher.compute_exp_rho_state(states[0])
             learners[1].update_step(rho_imt, args.update, states[0])
             curriculum_curves[1, env.state_to_task(states[0]), iteration] = 1
 
-            #Cur teacher
-            rho_curriculum, state = teacher.curriculum_state_teacher(learners[2], iteration)
-            learners[2].update_step(rho_curriculum, args.update, state)
+            #SCOT teacher
+            if iteration < len(batch_states):
+                    state = batch_states[iteration]
+            else:
+                state = np.random.choice(env.initial_states)
+            learners[2].update_step(teacher.compute_exp_rho_state(state), args.update, state)
             curriculum_curves[2, env.state_to_task(state), iteration] = 1
 
-            #Cur-T teacher
-            rho_curriculum, state = teacher.teacher_curr_teacher(iteration)
+            #Cur teacher
+            rho_curriculum, state = teacher.curriculum_state_teacher(learners[3])
             learners[3].update_step(rho_curriculum, args.update, state)
             curriculum_curves[3, env.state_to_task(state), iteration] = 1
 
-            #Cur-L teacher
-            rho_curriculum, state = teacher.learner_curr_teacher(learners[4], iteration)
+            #Cur-T teacher
+            rho_curriculum, state = teacher.teacher_curr_teacher()
             learners[4].update_step(rho_curriculum, args.update, state)
             curriculum_curves[4, env.state_to_task(state), iteration] = 1
+
+            #Cur-L teacher
+            rho_curriculum, state = teacher.learner_curr_teacher(learners[5])
+            learners[5].update_step(rho_curriculum, args.update, state)
+            curriculum_curves[5, env.state_to_task(state), iteration] = 1
+
+            #BBox teacher
+            rho_bbox, state = teacher.blackbox_state_teacher(learners[6], -1)
+            learners[6].update_step(rho_bbox, args.update, state)
+            curriculum_curves[6, env.state_to_task(state), iteration] = 1
 
             for i in range(len(learners)):
                 reward_curves[i, iteration+1] = learners[i].exp_reward

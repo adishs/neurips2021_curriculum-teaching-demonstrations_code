@@ -78,22 +78,24 @@ def main():
         if (iteration+1) % 100 == 0:
             print ("Learners training step [{}/{}]".format(iteration+1, args.learner_train_iter))
 
-        #random batch
+        #Agn teacher
         random_batch, state = teacher.random_state_teaching()
         learners[0].gradient_update(random_batch)
         curriculum_curves[0, env.state_to_task(state), iteration] = 1
 
-        #curriculum-avg
-        curriculum_batch, state = teacher.curriculum_state_teaching(learners[1], iteration)
+        #Cur teacher
+        curriculum_batch, state = teacher.curriculum_state_teaching(learners[1])
         learners[1].gradient_update(curriculum_batch)
         curriculum_curves[1, env.state_to_task(state), iteration] = 1
 
-        traj, state = teacher.teacher_curr_state_teaching(iteration)
-        learners[2].gradient_update(traj)
+        #Cur-T teacher
+        curriculum_batch, state = teacher.teacher_curr_state_teaching()
+        learners[2].gradient_update(curriculum_batch)
         curriculum_curves[2, env.state_to_task(state), iteration] = 1
 
-        traj, state = teacher.learner_curr_state_teaching(learners[3], iteration)
-        learners[3].gradient_update(traj)
+        #Cur-L teacher
+        curriculum_batch, state = teacher.learner_curr_state_teaching(learners[3])
+        learners[3].gradient_update(curriculum_batch)
         curriculum_curves[3, env.state_to_task(state), iteration] = 1
 
         #store expected rewards.

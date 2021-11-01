@@ -182,43 +182,7 @@ class Teacher:
         return log_ratio
 
 
-    def curriculum_teacher(self, learner):
-        prob_ratio = list()
-
-        for s in self.init_states:
-            for trajectory in self.teacher_demonstrations[s]:
-                prob_ratio.append([self.importance_sampling_function(trajectory, learner), trajectory])
-
-        prob_ratio.sort(key=lambda l:l[0], reverse=True)
-        rho = np.zeros((self.env.n_states))
-        states = list()
-        for i in range(self.batch_size):
-            rho += prob_ratio[i][1][0]
-            states.append(prob_ratio[i][1][1][0][0])
-
-        return (rho/self.batch_size), states
-
-
-    def blackbox_teacher(self, learner):
-        blackbox_objective = list()
-
-        for s in self.init_states:
-            rho_s = learner.rho_from_state(s)
-            for trajectory in self.teacher_demonstrations[s]:
-                diff = np.dot(rho_s - trajectory[0], self.env.true_reward)
-            blackbox_objective.append([abs(diff), trajectory])
-
-        blackbox_objective.sort(key=lambda l:l[0], reverse=True)
-        rho = np.zeros((self.env.n_states))
-        states = list()
-        for i in range(self.batch_size):
-            rho += blackbox_objective[i][1][0]
-            states.append(blackbox_objective[i][1][1][0][0])
-
-        return (rho/self.batch_size), states
-
-
-    def blackbox_state_teacher(self, learner):
+    def blackbox_state_teacher(self, learner, iteration=-1):
         blackbox_objective = list()
 
         for s in self.init_states:
@@ -227,8 +191,8 @@ class Teacher:
             blackbox_objective.append([abs(diff), s])
 
         blackbox_objective.sort(key=lambda l:l[0], reverse=True)
-        
-        return self.compute_exp_rho_state(blackbox_objective[0][1]), [blackbox_objective[0][1]]
+        index = self.randomizer(iteration)
+        return self.compute_exp_rho_state(blackbox_objective[index][1]), blackbox_objective[index][1]
 
 
     def curriculum_state_teacher(self, learner, iteration=-1):
@@ -249,16 +213,25 @@ class Teacher:
 
     def teacher_curr_teacher(self, iteration=-1):
         state_list = list()
+        if iteration == -1:
+            if np.sum(self.seen_array) == len(self.init_states):
+                self.seen_array[:] = 0
 
         for s, trajectories in self.teacher_demonstrations.items():
+            if iteration == -1:
+                index = s//(2*self.env.road_length)
+                if self.seen_array[index] == 1:
+                    continue
             cost = 0
             for trajectory in trajectories:
                 cost += self.teacher_importance_score(trajectory)
-
             state_list.append([cost, s])
+
         state_list.sort(key=lambda l:l[0], reverse=True)
         index = self.randomizer(iteration)
         opt_state = state_list[index][1]
+        if iteration == -1:
+            self.seen_array[opt_state//(2*self.env.road_length)] = 1
         return self.compute_exp_rho_state(opt_state), opt_state
 
 
@@ -324,3 +297,34 @@ class Teacher:
                 opt_state = s
 
         return self.compute_exp_rho_state(opt_state), opt_state
+
+
+    def batch_teacher(self):
+        """
+        @brief: SCOT teaching algorithm.
+        """
+        U = dict()
+        for s in self.init_states:
+            U[s] = np.dot(self.compute_exp_rho_state(s), self.env.feature_matrix)
+
+        batch = list()
+        while len(U) > 0:
+            max_count = -1
+            for s in self.init_states:
+                if s in batch: continue
+                mu_s = np.dot(self.compute_exp_rho_state(s), self.env.feature_matrix)
+                states = list()
+                count = 0
+                for state, mu in U.items():
+                    if np.all(mu == mu_s):
+                        count += 1
+                        states.append(state)
+                if count > max_count:
+                    max_count = count
+                    max_state = s
+                    states_to_remove = states
+            batch.append(max_state)
+            for s in states_to_remove:
+                del U[s]
+
+        return batch

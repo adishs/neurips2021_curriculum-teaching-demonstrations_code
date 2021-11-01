@@ -286,18 +286,22 @@ class policy_gradient_teacher:
 
 
     def teacher_curr_state_teaching(self, iteration=-1):
+        if np.sum(self.seen_states) == len(self.env.initial_states):
+            self.seen_states[:] = 0
         state_list = list()
 
         for s, trajectories in self.demonstrations.items():
+            if self.seen_states[s//(2*self.env.road_length)] == 1:
+                continue
             cost = 0
             for trajectory in trajectories:
                 cost += self.teacher_importance_score(trajectory)
-
             state_list.append([cost, s])
 
         state_list.sort(key=lambda l:l[0], reverse=True)
         index = self.randomizer(iteration)
         opt_state = state_list[index][1]
+        self.seen_states[opt_state // (2*self.env.road_length)] = 1
         return self.demonstrations[opt_state], opt_state
 
 

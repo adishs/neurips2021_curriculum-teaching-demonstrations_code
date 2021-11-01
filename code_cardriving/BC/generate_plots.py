@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-mpl.rc('legend', **{'fontsize': 16})
+mpl.rc('legend', **{'fontsize': 16.6})
 mpl.rc('text', usetex=True)
 import numpy as np
 import os
@@ -14,18 +14,18 @@ args = parser.parse_args()
 def final_plot_all(reward_curves, path):
     mpl.rc('xtick', **{'labelsize': 18})
     mpl.rc('ytick', **{'labelsize': 18})
-    mpl.rc('font',**{'family':'serif','serif':['Times'], 'size': 22})
+    mpl.rc('font',**{'family':'serif','serif':['Times'], 'size': 25})
     plt.figure()
     fig_size = (5.5 / 1.3, 3.4 / 0.95)
     fig = mpl.pyplot.gcf()
     fig.set_size_inches(*fig_size)
     spacing=10
-    plt.errorbar(np.arange(len(reward_curves[1][0]))[::spacing], np.mean(reward_curves[1], axis=0)[::spacing], yerr=(np.std(reward_curves[1], axis=0)/np.sqrt(len(reward_curves)))[::spacing], color='forestgreen', linewidth=2.5, label='Cur', elinewidth=1.0)
-    plt.errorbar(np.arange(len(reward_curves[2][0]))[::spacing], np.mean(reward_curves[2], axis=0)[::spacing], yerr=(np.std(reward_curves[2], axis=0)/np.sqrt(len(reward_curves)))[::spacing], color='dodgerblue', ls='-.', linewidth=2.5, label='Cur-T', elinewidth=1.0)
-    plt.errorbar(np.arange(len(reward_curves[3][0]))[::spacing], np.mean(reward_curves[3], axis=0)[::spacing], yerr=(np.std(reward_curves[3], axis=0)/np.sqrt(len(reward_curves)))[::spacing], color='mediumpurple', ls='--', linewidth=2.5, label='Cur-L', elinewidth=1.0)
-    plt.errorbar(np.arange(len(reward_curves[0][0]))[::spacing], np.mean(reward_curves[0], axis=0)[::spacing], yerr=(np.std(reward_curves[0], axis=0)/np.sqrt(len(reward_curves)))[::spacing], color='orangered', ls=':', linewidth=3, label='Agn', elinewidth=1.0)
+    plt.errorbar(np.arange(len(reward_curves[1][0]))[::spacing], np.mean(reward_curves[1], axis=0)[::spacing], yerr=(np.std(reward_curves[1], axis=0)/np.sqrt(len(reward_curves)))[::spacing], color='forestgreen', linewidth=3, label=r'$\textsc{Cur}$', elinewidth=1.0)
+    plt.errorbar(np.arange(len(reward_curves[2][0]))[::spacing], np.mean(reward_curves[2], axis=0)[::spacing], yerr=(np.std(reward_curves[2], axis=0)/np.sqrt(len(reward_curves)))[::spacing], color='dodgerblue', ls='-.', linewidth=2.5, label=r'$\textsc{Cur-T}$', elinewidth=1.0)
+    plt.errorbar(np.arange(len(reward_curves[3][0]))[::spacing], np.mean(reward_curves[3], axis=0)[::spacing], yerr=(np.std(reward_curves[3], axis=0)/np.sqrt(len(reward_curves)))[::spacing], color='mediumpurple', marker='^', markersize=6, markevery=2, ls='--', linewidth=2.5, label=r'$\textsc{Cur-L}$', elinewidth=1.0)
+    plt.errorbar(np.arange(len(reward_curves[0][0]))[::spacing], np.mean(reward_curves[0], axis=0)[::spacing], yerr=(np.std(reward_curves[0], axis=0)/np.sqrt(len(reward_curves)))[::spacing], color='orangered', ls=':', linewidth=3.5, label=r'$\textsc{Agn}$', elinewidth=1.0)
     plt.ylabel('Expected reward')
-    plt.legend(loc='lower right')
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, 1.31),ncol=2, fancybox=False, shadow=False)
     plt.xlabel('Time t')
     plt.savefig(path, dpi=300, bbox_inches='tight')
     plt.close()
@@ -35,7 +35,7 @@ def final_plot_all(reward_curves, path):
 def plot_curriculum(curriculum_array, path, tasks):
     mpl.rc('xtick', **{'labelsize': 20})
     mpl.rc('ytick', **{'labelsize': 20})
-    mpl.rc('font',**{'family':'serif','serif':['Times'], 'size': 22})
+    mpl.rc('font',**{'family':'serif','serif':['Times'], 'size': 25})
     plt.figure()
     fig_size = (5.5 / 1.3, 3.4 / 0.95)
     fig = mpl.pyplot.gcf()

@@ -50,13 +50,18 @@ The path to the result graph will be './results/init_lanes=x/expected_reward_gra
 The curriculum plots will be located in the folder './results/init_lanes=x/cur/curriculum/'.
 
 
-## Shortest Path Experiments
+## Navigation-based Environments Experiments
 
-The first step is to generate the dataset running the command:
+The first step is to generate the dataset.
+
+For the shortest path environment, run the command:
 `python3 generate_dataset.py`
 
+For the TSP inspired environment, run the command:
+`python3 tsp_dataset_generator.py`
+
 Subsequently, run the following command to obtain results for individual teaching algorithms:
-`python3 main.py --curr_version x`
+`python3 main.py --curr_version x --task_type y`
 
 Here 'x' is an integer specifying the teaching algorithm as follows:
 
@@ -68,10 +73,11 @@ Here 'x' is an integer specifying the teaching algorithm as follows:
 
 3 - Cur-T teacher
 
+The '--task_type' flag can be selected as either "shortest_path" or "tsp" for the two respective environments.
+
 The '--number' flag specifies the run ID. In our paper, results are averaged over 5 runs. Additionally, the '--gpu' flag can be used to select the gpu ID. Further flags are detailed in the code.
 
 Obtain results for all four teaching algorithms, i.e., x = {0, 1, 2, 3}. Then run the following command to get the result graph:
-`python3 plot_results.py`
+`python3 plot_results.py --task_type y`
 
-The path to the result graph will be './results/test_reward_graph.pdf'.
-
+The result graph will be written to the results folder.

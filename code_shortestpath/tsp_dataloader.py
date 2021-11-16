@@ -4,13 +4,14 @@ import numpy as np
 import os
 
 
-class navigation_dataset(torch.utils.data.Dataset):
+class tsp_dataset(torch.utils.data.Dataset):
 
     def __init__(self, data_path, difficulty="uniform", b=1, a=0, max_iters=None):
         self.X = []
         self.y = []
         self.locations = []
         self.file_name = []
+        self.goals = []
         self.stats = []
         path = os.path.join(data_path, "np_arrays/")
         max_horizon = 0
@@ -26,18 +27,15 @@ class navigation_dataset(torch.utils.data.Dataset):
                 longest_index = len(self.y) - 1
             self.locations.append(arr["initial_location"])
             self.file_name.append(os.path.join(path, f))
+            self.goals.append(arr["goals"])
             stat_arr = list()
-            stat_arr.append(arr["reward"])
-            self.min_reward = min(self.min_reward, arr["reward"])
-            avg_optimal_reward += arr["reward"]
+            stat_arr.append(arr["reward"]+10)
+            self.min_reward = min(self.min_reward, arr["reward"]+10)
+            avg_optimal_reward += arr["reward"]+10
+            stat_arr.append(arr["greedy_reward"]+10)
             stat_arr.append(arr["turns"])
-            stat_arr.append(arr["muds"])
             stat_arr.append(arr["goals"])
-            stat_arr.append(arr["bombs"])
-            stat_arr.append(arr["reachable"])
-            stat_arr.append(arr["num_optimal_paths"])
             self.stats.append(stat_arr)
-
         assert len(self.X)==len(self.stats), "Data loading error."
         self.ordering = np.arange(len(self.X))
         self.iteration = 1
@@ -63,7 +61,7 @@ class navigation_dataset(torch.utils.data.Dataset):
     def curriculum_order(self, learner_diff):
         objective = np.array([])
         for i in range(len(self.X)):
-            objective = np.append(objective, self.difficulty_array[i] - learner_diff(torch.Tensor(self.X[i]).permute(2, 0, 1), torch.LongTensor(self.locations[i]), torch.LongTensor(self.y[i])))
+            objective = np.append(objective, self.difficulty_array[i] - learner_diff(torch.Tensor(self.X[i]).permute(2, 0, 1), torch.LongTensor(self.locations[i]), torch.LongTensor(self.y[i]), torch.from_numpy(self.goals[i])))
         self.ordering = np.argsort(objective)
         self.ordering = self.ordering[:self.randomized_curriculum()]
         self.ordering = np.random.permutation(self.ordering)
@@ -84,8 +82,8 @@ class navigation_dataset(torch.utils.data.Dataset):
 
 
     def teacher_difficulty(self, index):
-        #goals * num_optimal_paths / reward
-        return self.stats[index][3] * self.stats[index][6] / (self.stats[index][0] - self.min_reward + 1)
+        #goals / reward
+        return self.goals[index] / (self.stats[index][0] - self.min_reward + 1)
 
 
     def randomized_curriculum(self, pacing_fn="linear"):
@@ -102,11 +100,11 @@ class navigation_dataset(torch.utils.data.Dataset):
 
 
     def __getitem__(self, i):
-        return torch.Tensor(self.X[self.ordering[i]]).permute(2, 0, 1), torch.LongTensor(self.y[self.ordering[i]]), torch.LongTensor(self.locations[self.ordering[i]]), self.file_name[self.ordering[i]]
+        return torch.Tensor(self.X[self.ordering[i]]).permute(2, 0, 1), torch.LongTensor(self.y[self.ordering[i]]), torch.LongTensor(self.locations[self.ordering[i]]), self.file_name[self.ordering[i]], torch.from_numpy(self.goals[self.ordering[i]])
 
 
-def pad_label_collate(batch):
-    (input, labels, locations, file_names) = zip(*batch)
+def pad_label_collate_tsp(batch):
+    (input, labels, locations, file_names, goals) = zip(*batch)
     padded_labels = pad_sequence(labels, batch_first=True, padding_value=-1)
 
-    return torch.stack(input), padded_labels, torch.stack(locations), list(file_names)
+    return torch.stack(input), padded_labels, torch.stack(locations), list(file_names), torch.stack(goals)

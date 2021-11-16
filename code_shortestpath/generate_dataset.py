@@ -123,7 +123,7 @@ class data_generator:
                         new_cost += 1
                         muds += 1
 
-                    if weights[tuple(location)] > new_cost:# and new_cost < 10-max_reward:
+                    if weights[tuple(location)] > new_cost:
                         weights[tuple(location)] = new_cost
                         count += 1
                         new_node = (new_cost, copy.deepcopy(count), [location, path, turns, muds])
@@ -216,7 +216,7 @@ class data_generator:
 
 
 def main():
-    dataset_dir = "./dataset/{}/"
+    dataset_dir = "./datasets/shortest_path_data/{}/"
     max_muds = max_bombs = 12
     max_goals = 2
     mode = ["train", "test", "val"]

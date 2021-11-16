@@ -6,7 +6,7 @@ import argparse
 import copy
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--data_dir', nargs='?', const=1, type=str, default="./dataset/")
+parser.add_argument('--data_dir', nargs='?', const=1, type=str, default="./datasets/")
 parser.add_argument('--result_folder', nargs='?', const=1, type=str, default="./results/")
 parser.add_argument('--grid_size', nargs='?', const=1, type=int, default=6)
 parser.add_argument('--in_features', nargs='?', const=1, type=int, default=7)
@@ -17,6 +17,7 @@ parser.add_argument('--task_embedding_size', nargs='?', const=1, type=int, defau
 parser.add_argument('--gpu', nargs='?', const=1, type=int, default=0)
 parser.add_argument('--curr_version', nargs='?', const=1, type=int, default=0)
 parser.add_argument('--number', nargs='?', const=1, type=int, default=0)
+parser.add_argument('--task_type', nargs='?', const=1, type=str, default="tsp")
 args = parser.parse_args()
 
 os.environ["CUDA_VISIBLE_DEVICES"]=str(args.gpu)
@@ -35,11 +36,12 @@ def main():
     pacing_fn_dict = {"b": b, "a": a}
     #train the models.
     curr_type = dict_curr[args.curr_version]
-    learner = agent(args.grid_size, 3, curr_type[0], curr_type[1], args.in_features, args.data_dir, args.lr, args.batch_size, args.max_epoch, **pacing_fn_dict)
+    learner = agent(args.task_type, args.grid_size, 3, curr_type[0], curr_type[1], args.in_features, args.data_dir, args.lr, args.batch_size, args.max_epoch, **pacing_fn_dict)
     path_identifier = "{}_b={}_a={}/".format(curr_names[args.curr_version], b*10, a*10)
     learner.train_model()
 
-    results_dir = os.path.join(args.result_folder, path_identifier)
+    print ("Saving results.")
+    results_dir = os.path.join(args.result_folder, args.task_type, path_identifier)
     if not os.path.isdir(results_dir):
         os.makedirs(results_dir)
     np.savez(os.path.join(results_dir, "run_{}".format(args.number)),

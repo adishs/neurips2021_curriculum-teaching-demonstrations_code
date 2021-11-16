@@ -3,6 +3,7 @@ from torch.utils.data import DataLoader
 import torch.optim as optim
 import numpy as np
 from dataloader import *
+from tsp_dataloader import *
 from model_files.task_embedding_network import *
 from model_files.policy_network import *
 import copy
@@ -10,14 +11,15 @@ import os
 
 class agent:
 
-    def __init__(self, grid_size, action_space, learner_curriculum_type, teacher_curriculum_type, in_features, data_dir, lr, batch_size, max_epoch, **kwargs):
+    def __init__(self, task_type, grid_size, action_space, learner_curriculum_type, teacher_curriculum_type, in_features, data_dir, lr, batch_size, max_epoch, **kwargs):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print (self.device)
-        self.p = 0.1
+        self.task_type = task_type
+        print (task_type)
         self.size = grid_size
         self.actions = action_space
         self.in_features = in_features
-        self.data_dir = data_dir
+        self.data_dir = data_dir + "{}_data/".format(self.task_type)
         self.lr = lr
         self.batch_size = batch_size
         self.max_epoch = max_epoch
@@ -37,12 +39,22 @@ class agent:
         elif learner_curriculum_type == "uniform":
             self.func = self.uniform_difficulty
 
-        if len(kwargs) > 0:
-            self.train_set = navigation_dataset(data_dir + "train/", teacher_curriculum_type, kwargs["b"], kwargs["a"], self.max_epoch)
-        else:
-            self.train_set = navigation_dataset(data_dir + "train/", teacher_curriculum_type)
-        self.val_set = navigation_dataset(data_dir + "val/")
-        self.test_set = navigation_dataset(data_dir + "test/")
+        if self.task_type=="shortest_path":
+            if len(kwargs) > 0:
+                self.train_set = navigation_dataset(self.data_dir + "train/", teacher_curriculum_type, kwargs["b"], kwargs["a"], self.max_epoch)
+            else:
+                self.train_set = navigation_dataset(self.data_dir + "train/", teacher_curriculum_type)
+            self.val_set = navigation_dataset(self.data_dir + "val/")
+            self.test_set = navigation_dataset(self.data_dir + "test/")
+            self.pad_label_collate = pad_label_collate
+        elif self.task_type=="tsp":
+            if len(kwargs) > 0:
+                self.train_set = tsp_dataset(self.data_dir+"train/", teacher_curriculum_type, kwargs["b"], kwargs["a"], self.max_epoch)
+            else:
+                self.train_set = tsp_dataset(self.data_dir + "train/", teacher_curriculum_type)
+            self.val_set = tsp_dataset(self.data_dir + "val/")
+            self.test_set = tsp_dataset(self.data_dir + "test/")
+            self.pad_label_collate = pad_label_collate_tsp
         print ("Dataset loaded.")
 
         self.step = 0
@@ -74,9 +86,9 @@ class agent:
 
     def load_dataset(self):
         if self.func is None:
-            train_data = DataLoader(self.train_set, batch_size=self.batch_size, shuffle=True, collate_fn=pad_label_collate)
+            train_data = DataLoader(self.train_set, batch_size=self.batch_size, shuffle=True, collate_fn=self.pad_label_collate)
         else:
-            train_data = DataLoader(self.train_set, batch_size=self.batch_size, shuffle=False, collate_fn=pad_label_collate)
+            train_data = DataLoader(self.train_set, batch_size=self.batch_size, shuffle=False, collate_fn=self.pad_label_collate)
         return train_data
 
 
@@ -117,6 +129,8 @@ class agent:
                 labels = data[1].to(self.device)
                 locations = data[2].to(self.device)
                 self.curriculum.append(data[3])
+                if self.task_type == "tsp":
+                    goals = data[4].to(self.device)
 
                 optimizer.zero_grad()
                 loss = 0.
@@ -127,7 +141,10 @@ class agent:
                     _, predicted = torch.max(outputs, 1)
                     loss += criterion(outputs, labels[:, l])
                     #update task grid
-                    _, task, locations = self.update_tasks(task, locations, labels[:, l])
+                    if self.task_type=="shortest_path":
+                        _, task, locations = self.update_tasks(task, locations, labels[:, l])
+                    elif self.task_type=="tsp":
+                        _, task, locations, goals = self.update_tsp_tasks(task, locations, labels[:, l], goals)
                     epoch_correct += (predicted==labels[:, l]).sum().item()
                     epoch_linecount += labels.shape[0] - (labels[:, l]==-1).sum().item()
                     flag = torch.logical_and(flag, torch.logical_or(predicted==labels[:, l], labels[:, l]==-1) )
@@ -189,8 +206,6 @@ class agent:
                 continue
 
             task[i, location[i][2]][tuple(location[i][:2])] = 0
-            if np.random.rand() < self.p:
-                t = np.random.choice(np.arange(self.actions))
 
             if t == 0:
                 location[i] = location[i] + self.direction_step[location[i][2]]
@@ -216,6 +231,45 @@ class agent:
         return reward, task, location
 
 
+    def update_tsp_tasks(self, task_o, location_o, tokens, goals_o):
+        reward = []
+        task = task_o.detach().clone()
+        location = location_o.detach().clone()
+        goals = goals_o.detach().clone()
+        for i, t in enumerate(tokens):
+            if t==-1: continue
+            cost = 1
+            if torch.all(location[i] == -1):
+                print ("Entered ended task.")
+                print (tokens[i])
+                exit(0)
+
+            task[i, location[i][2]][tuple(location[i][:2])] = 0
+            if t == 0:
+                location[i] = location[i] + self.direction_step[location[i][2]]
+            elif t == 1:
+                location[i][2] = (location[i][2]-1)%4
+            elif t == 2:
+                location[i][2] = (location[i][2]+1)%4
+
+            if self.is_valid(location[i]):
+                task[i, location[i][2]][tuple(location[i][:2])] = 1
+                if task[i, 4][tuple(location[i][:2])] == 1: #start
+                    if goals[i] == 0:
+                        cost -= 10
+                        location[i] = -torch.ones(location[i].shape)
+                elif task[i, 5][tuple(location[i][:2])] == 1: #goal
+                    goals[i] -= 1
+                    task[i, 5][tuple(location[i][:2])] = 0
+                elif self.in_features == 7 and task[i, 6][tuple(location[i][:2])] == 1: #mud
+                    cost += 1
+            else:
+                cost += 10
+                location[i] = -torch.ones(location[i].shape)
+            reward.append(-cost)
+        return reward, task, location, goals
+
+
     def is_valid(self, location):
         if location[0]>=0 and location[0]<self.size and location[1]>=0 and location[1]<self.size:
             return True
@@ -235,43 +289,52 @@ class agent:
         with torch.no_grad():
             total_reward = 0.
 
-            # for task, labels, locations, filenames in test_data:
             for data in test_data:
                 task = data[0].to(self.device)
                 labels = data[1].to(self.device)
                 locations = data[2].to(self.device)
+                if self.task_type == "tsp":
+                    goals = data[4]
 
                 steps = 0
                 while torch.any(locations[0] != -1) and steps < self.horizon_len[self.size]:
                     outputs = net(task)
                     _, predicted = torch.max(outputs, 1)
-                    reward, task, locations = self.update_tasks(task, locations, predicted)
+                    if self.task_type=="shortest_path":
+                        reward, task, locations = self.update_tasks(task, locations, predicted)
+                    elif self.task_type=="tsp":
+                        reward, task, locations, goals = self.update_tsp_tasks(task, locations, predicted, goals)
                     total_reward += reward[0]
                     steps += 1
         return total_reward/len(test_data)
 
 
-    def learner_difficulty(self, task, location, labels):
-        return -(self.policy_log_likelihood(task.to(self.device), location.to(self.device), labels.to(self.device)))
+    def learner_difficulty(self, task, location, labels, goals=None):
+        return -(self.policy_log_likelihood(task.to(self.device), location.to(self.device), labels.to(self.device), goals))
 
 
-    def policy_log_likelihood(self, task, location, labels):
+    def policy_log_likelihood(self, task, location, labels, goals=None):
         self.policy_net.eval()
         log_likelihood = 0.
         prob_layer = torch.nn.LogSoftmax(dim=1)
         task = task.unsqueeze(0)
         location = location.unsqueeze(0)
         labels = labels.unsqueeze(0)
+        if goals is not None:
+            goals = goals.unsqueeze(0).to(self.device)
         with torch.no_grad():
             task = task.to(self.device)
             for l in range(labels.shape[1]):
                 outputs = self.policy_net(task)
                 outputs = prob_layer(outputs)
                 log_likelihood += outputs[0, labels[:, l]]
-                _, task, location = self.update_tasks(task, location, labels[:, l])
+                if self.task_type=="shortest_path":
+                    _, task, location = self.update_tasks(task, location, labels[:, l])
+                elif self.task_type=="tsp":
+                    _, task, location, goals = self.update_tsp_tasks(task, location, labels[:,l], goals)
 
         return log_likelihood.cpu()
 
 
-    def uniform_difficulty(self, task=None, location=None, labels=None, key=None):
+    def uniform_difficulty(self, task=None, location=None, labels=None, gaols=None):
         return 1.
